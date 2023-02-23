@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#set -x 
+# set -x 
 
 source playground_vars.sh  
 
@@ -89,8 +89,9 @@ function check_gen_ssh_key(){
     if ! ssh-keygen -y -P "" -f "${SSHPKEYPATH}""${SSHKEYNAME}" > /dev/null 2>&1;
       then
         echo "ssh key exist BUT WITH PASSPHRASE"
-        echo "remove the passphrase using: ssh-keygen -p ${SSHPKEYPATH}${SSHKEYNAME}"
+        echo "either remove the passphrase using: ssh-keygen -p ${SSHPKEYPATH}${SSHKEYNAME}"
         echo "or update the playground_vars script and change SSHKEYNAME value"
+        echo "or load the ssh keypair using ssh-agent"
         exit
     fi
     else
@@ -114,6 +115,20 @@ users:
 EOF
 }
 
+function check_instances() {
+  for knode in ${K0SHOSTLIST}; 
+  do 
+    timeout 5 bash -c "</dev/tcp/"${knode}"/22"
+#  ssh -q -o BatchMode=yes  -o StrictHostKeyChecking=no -o ConnectTimeout=5 "${knode}" 'exit 0'
+    if [ $? == 0 ];then
+      echo "SSH Connection to "${knode}" is possible"
+    else
+      echo "SSH Connection to "${knode}" is broken"
+      exit 1
+    fi
+  done
+}
+
 function create_instances(){
 K0SHOSTLIST=()
 
@@ -126,7 +141,7 @@ for ((n = 1 ; n <= "${NUMBER_OF_VMS}" ; n++)); do
   nodeip="$(multipass info "${K0SNODENAME}"-"${n}" --format csv | awk -F',' '{print$3}' | tail -1)"
   K0SHOSTLIST+="${nodeip} "
 done
-
+check_instances
 }
 
 function gen_k0s_config(){
@@ -252,16 +267,16 @@ function valid_ip()
     return $stat
 }
 
-function check_pods_ready_status(){
+# function check_pods_ready_status(){
 
-until [ $(kubectl -n ${1} get pods -o jsonpath='{range .items[*]}{.status.containerStatuses[*].ready.true}{.metadata.name}{ "\n"}{end}' | wc -l ) -eq $(kubectl get po -n ${1} | tail -n +2 | wc -l  )  ];
-do 
-  sleep 10
-  echo "waiting for ${1} pods to be fully ready"
-done
-  echo "${1} pods status: " $(printf "${BOLDGREEN}READY${ENDCOLOR}")
+# until [ $(kubectl -n ${1} get pods -o jsonpath='{range .items[*]}{.status.containerStatuses[*].ready.true}{.metadata.name}{ "\n"}{end}' | wc -l ) -eq $(kubectl get po -n ${1} | tail -n +2 | wc -l  )  ];
+# do 
+#   sleep 10
+#   echo "waiting for ${1} pods to be fully ready"
+# done
+#   echo "${1} pods status: " $(printf "${BOLDGREEN}READY${ENDCOLOR}")
 
-}
+# }
 
 function check_deployment_status(){
 
@@ -339,30 +354,67 @@ function create_platform() {
   do
     K0SCLUSTERNAME=${K0SCLUSTERNAMEVAR}-"${p}"
     K0SNODENAME=${K0SCLUSTERNAME}-node
+    printf "${CL}${BLUE}${BOLD}Cluster: ${K0SCLUSTERNAME} \n${NORMAL}"
     create_instances
     exec_spinner "gen_k0s_config" "Work in Progress" "Generating k0s yaml"
       if [ ${CILIUMENABLED} == 'true' ];
         then
-        echo "Cilium Enabled"
+            printf "${CL}${BLUE}${BOLD}Cluster: ${K0SCLUSTERNAME} will use Cilium Clustermesh configuration \n${NORMAL}"
             exec_spinner "tweak_k0s_config" "Work in Progress" "tweaking k0s config"
             exec_spinner "build_k0s_cluster" "Work in Progress" "Building k0s cluster"
             exec_spinner "gen_kube_config" "Work in Progress" "Generating kubeconfig"
             exec_spinner "apply_metallb_config" "Work in Progress" "Deploy MetalLB"
             exec_spinner "enable_cilium_clustermesh" "Work in Progress" "Deploying Cilium"           
         else
-        echo "Using default k0s CNI"
+            printf "${CL}${BLUE}${BOLD}Cluster: ${K0SCLUSTERNAME} will use default CNI \n${NORMAL}"
             exec_spinner "build_k0s_cluster" "Work in Progress" "Building k0s cluster"
             exec_spinner "gen_kube_config" "Work in Progress" "Generating kubeconfig"
             exec_spinner "merge_kube_config" "Work in Progress" "merging kubeconfig"
       fi
   done
 }
+function playground_help() {
+  # Display Help
+
+  printf "${CL}${GREEN}${BOLD}Cilium playground scripts \n${NORMAL}"
+
+  # printf "${CL}${GREEN}${BOLD}✓${WHITE}${BOLD} ${task} ${GREEN}${BOLD}Done\n${NORMAL}"
+
+   echo ""
+   echo
+   printf "${CL}Syntax: ./playground [${GREEN}${BOLD} -i / --install || -d / --delete || ${RED}${BOLD} -v / --verbose ${GREEN}${BOLD} || -h / --help]\n${NORMAL}"
+   echo ""
+   echo "options:"
+   printf "${GREEN} -i / --install     deploys the playground\n${NORMAL}"
+   printf "${GREEN} -d / --delete      delete the playground , but leave '${BINLIST}' installed\n${NORMAL}"
+   printf "${GREEN} -h / --help        Print this Help.\n${NORMAL}"
+   printf "${RED} -v / --verbose     Verbose mode [ NOT IMPLEMENTED YET ]\n${NORMAL}"
+   echo
+   exit 0
+}
 
 function purge_all() {
-  # test thing
-#  echo "purging everything"
-  mlist="$(multipass list --format csv |  awk -F',' '{print$1}' | awk 'BEGIN { ORS = " " } { print }')"
-  nodelist=("${mlist[@]:1}") 
-  multipass delete ${nodelist} && multipass purge
-  brew uninstall k0sctl multipass
+  echo "${K0SCLUSTERNAMEVAR}"
+  nodelist="$(multipass list --format csv | grep "${K0SCLUSTERNAMEVAR}" |  awk -F',' '{print$1}' | awk 'BEGIN { ORS = " " } { print }'  )"
+  printf "${RED} HERE THE NODE LIST TO BE DELETED: \n${NORMAL}" "${nodelist}"
+  printf "${BOLD}${RED}Do you wish to delete them? \n${NORMAL}"
+  read -p "are you REALLY SURE ? (Delete_ALL/No) " yn
+  case $yn in 
+    Delete_ALL ) exec_spinner "multipass delete ${nodelist}" "Work in Progress" "deleting nodes" && exec_spinner "multipass purge" "Work in Progress" "Purging multipass" && rm -f "${HOME}"/.kube/"${K0SCLUSTERNAMEVAR}"-*.config *-"${K0SCLUSTERNAMEVAR}"-* config/*-"${K0SCLUSTERNAMEVAR}"-* config/multipass-cloud-init.yml  && \
+    printf "\n${BOLD}${RED} /!\/!\/!\/!\/!\/!\/!\/!\/!\/!\/!\/!\/!\/!\/!\/!\/!\/!\/!\/!\/!\/!\ ${NORMAL}" \
+    && printf "\n${BOLD}${RED} /!\ you might need to manually Cleanup your ~/.ssh/known_hosts /!\ ${NORMAL}" \
+    && printf "\n${BOLD}${RED} /!\/!\/!\/!\/!\/!\/!\/!\/!\/!\/!\/!\/!\/!\/!\/!\/!\/!\/!\/!\/!\/!\ \n${NORMAL}" ; break ;;
+    No ) echo "OK i won't change anything ( yet? :p )"; exit ;;
+    * ) echo "you need to either enter: Delete_ALL or No ";;
+  esac
+}
+
+function count_down() {
+COUNT=$1
+# bash while loop
+while [ $COUNT -gt 0 ]; do
+        echo $COUNT
+        let COUNT=COUNT-1
+        sleep 1
+done
 }

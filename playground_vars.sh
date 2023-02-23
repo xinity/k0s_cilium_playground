@@ -1,7 +1,17 @@
 #!/usr/bin/env bash
+### DO NOT CHANGES THOSE VARIABLES ####
 
+#### COLORS:
+GREEN="32"
+BOLDGREEN="\e[1;${GREEN}m"
+ENDCOLOR="\e[0m"
+
+#### list of binaries required
 BINLIST="brew multipass k0sctl kubectl helm"
 
+### DO NOT CHANGES THOSE VARIABLES ####
+
+### VARIABLES BELOW CAN BE CHANGED ####
 DEBUGENABLED='true'
 
 K0SCTLVERS='v0.14.0'
@@ -32,7 +42,4 @@ K0SCLUSTERNUMBER='2'
 
 K0SCLUSTERNAMEVAR='k0scilium'
 
-### COLORS:
-GREEN="32"
-BOLDGREEN="\e[1;${GREEN}m"
-ENDCOLOR="\e[0m"
+
