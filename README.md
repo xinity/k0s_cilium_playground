@@ -43,7 +43,7 @@ Several variables as been declared in the `playground_vars.sh`  script, some of 
 ### deployment
 if you don't feel the need to tweak the default variables, you just need to run the `init_playground` :
 ```
-git clone https://github.com/xinity/k0s-cilium-playground
+git clone https://github.com/xinity/k0s_cilium_playground
 chmod u+x playground.sh
 ./playground.sh -i
 
