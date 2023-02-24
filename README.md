@@ -56,3 +56,4 @@ or
 - code refactoring
 - log management 
 - FULL debug mode
+- add full https local FQDN management
