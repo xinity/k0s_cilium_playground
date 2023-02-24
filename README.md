@@ -58,3 +58,4 @@ or
 - FULL debug mode
 - add full https local FQDN management
 - add cilium full ingress support
+- add support for Cilium 1.13 IPAM (without metallb)
