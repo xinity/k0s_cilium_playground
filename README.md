@@ -57,3 +57,4 @@ or
 - log management 
 - FULL debug mode
 - add full https local FQDN management
+- add cilium full ingress support
